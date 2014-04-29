@@ -260,11 +260,6 @@ def get_auth_token():
     token = g.user.generate_auth_token(600)
     return jsonify({'token': token.decode('ascii'), 'duration': 600})
 
-@app.route('/api/resource')
-@auth.login_required
-def get_resource():
-    return jsonify({'data': 'Hello, %s!' % g.user.username})
-
 if __name__ == '__main__':
     if not os.path.exists('db.sqlite'):
         db.create_all()
