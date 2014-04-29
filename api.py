@@ -101,29 +101,14 @@ def bad_request():
     return (jsonify({'message':'bad request'}), 400)
 
 
-# user_fields = {
-#     'username' : fields.String,
-#     'password' : fields.String,
-#     'uri' : fields.Url('users')
-# }
-
-
 class UserListAPI(Resource):
    
-
-    # def __init__(self):
-    #     self.reqparse = reqparse.RequestParser()
-    #     self.reqparse.add_argument('username', type = str, required = True, help = 'username required', Location = 'json')
-    #     self.reqparse.add_argument('password', type = str, required = True, help = 'password required', Location ='json')
-    #     super(UserListAPI, self).__init__()
-
     def get(self):
         decorators = [auth.login_required]
         cols = ['id', 'username']
         user = User.query.all() #get all users
         result = [{col: getattr(d, col) for col in cols} for d in user]
         return jsonify(users=result)
-        # return { 'users': map(lambda t: marshal(t, user_fields), User)}
 
     def post (self):
         username = request.json.get('username') #input username
@@ -151,7 +136,6 @@ class UserAPI(Resource):
 
     def delete(self, id):
         user = User.query.get(id) #get user to be deleted
-        # usern = User.query.get(username)
         if not user.username is not user.id:
             return { 'message': 'invalid credentials. cannot delete'}
         if not user: 
@@ -311,16 +295,6 @@ class CommentAPI(Resource):
         user = User.query.get(uid) #get user who commented
         post = Post.query.get(pid) #get post commented
         comment = Comment.query.get(id) #get comment to be deleted
-        if not comment: #if comment does not exist
-            return comment_notexist()
-        if not user: #if user does not exist
-            return user_notexist()
-        if not post:  #if post does not exist
-          return post_notexist() 
-        if Post.query.filter_by(title=title).first() is not None:
-            return post_exist()
-        if post.id is not comment.status.id: #if comment is not in the post or in different post 
-            return bad_request()
         db.session.delete(comment) #delete comment in db
         db.session.commit()
         return {'comment': comment.id, 'result': 'comment deleted' }
