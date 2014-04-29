@@ -75,66 +75,21 @@ def verify_password(username_or_token, password):
     g.user = user
     return True
 
-#error messages
-def user_notexist():
-	return (jsonify({'message': 'user does not exist' }), 404)
-	
-def user_exist():
-	return (jsonify({'message': 'user already exists' }), 400) 
-	
-def post_exist():
-	return (jsonify({'message': 'post already exists' }), 400)
-	
-def missing_arg():
-	return (jsonify({'message': 'missing arguments' }), 400)
-
-def post_notexist():
-    return (jsonify({'message': 'post does not exist' }), 404)
-
-def comment_notexist():
-    return (jsonify({'message': 'comment does not exist' }), 404)
-
-def not_allowed():
-    return (jsonify({'message':'not allowed'}), 405)
-
-def bad_request():
-    return (jsonify({'message':'bad request'}), 400)
-
-
-class UserListAPI(Resource):
-   
-    def get(self):
-        decorators = [auth.login_required]
-        cols = ['id', 'username']
-        user = User.query.all() #get all users
-        result = [{col: getattr(d, col) for col in cols} for d in user]
-        return jsonify(users=result)
-
-    def post (self):
-        username = request.json.get('username') #input username
-        password = request.json.get('password') #input password
-        if username is None or password is None: #missing arguments
-            return missing_arg()
-        if User.query.filter_by(username=username).first() is not None:
-            return user_exist() # existing user
-        user = User(username=username)
-        user.hash_password(password)
-        db.session.add(user)
-        db.session.commit()
-        return {'username': user.username, 'id': user.id}, 201
-
-api.add_resource(UserListAPI, '/api/users', endpoint ='users')
-
 class UserAPI(Resource):
-    decorators = [auth.login_required]
-
+    
     def get(self, id):
+        decorators = [auth.login_required]
         user = User.query.get(id)
         if not user:
-            return user_notexist()
+            cols = ['id', 'username']
+            user = User.query.all()
+            result = [{col: getattr(d, col) for col in cols} for d in user]
+            return jsonify(users=result)
+
         return {'id': user.id,'username': user.username}
 
     def delete(self, id):
+        decorators = [auth.login_required]
         user = User.query.get(id) #get user to be deleted
         if not user.username is not user.id:
             return { 'message': 'invalid credentials. cannot delete'}
@@ -144,65 +99,69 @@ class UserAPI(Resource):
         db.session.commit()
         return { 'username' : user.username, 'result': 'user deleted' }, 200
 
-api.add_resource(UserAPI, '/api/users/<int:id>', endpoint = 'user')
-
-class PostListAPI(Resource):
-    decorators = [auth.login_required]
-
-    def post(self, id):
-        user = User.query.get(id) #get user who will post
-        title = request.json.get('title')
-        body  = request.json.get('body')
-        p = Post(title = request.json.get('title'), body  = request.json.get('body'), author=user) #input title and body of post
-        if p.title is None or p.body is None: #missing arguments
-            return missing_arg()
-        if not user: #if user does not exist
-            return user_notexist()
-        if Post.query.filter_by(title=title).first() is not None:
-            return post_exist() #posts already exist
-        db.session.add(p) #add post to db
+    def post (self, id = None):
+        username = request.json.get('username') #input username
+        password = request.json.get('password') #input password
+        if username is None or password is None: #missing arguments
+            return {'message': 'missing arguments' }, 400
+        if User.query.filter_by(username=username).first() is not None:
+            return {'message': 'user already exists' }, 400 # existing user
+        user = User(username=username)
+        user.hash_password(password)
+        db.session.add(user)
         db.session.commit()
-        return { p.author.username : { 'post': p.title, 'body': p.body}}, 201
+        return {'username': user.username, 'id': user.id}, 201
 
-    def get(self, id):
-        user = User.query.get(id) #get user who posted
-        if not user: #if user does not exist
-            return user_notexist()
-        cols = ['id', 'title', 'body', 'user_id']
-        post = Post.query.filter_by(user_id = user.id) #get all posts of user
-        result = [{col: getattr(d, col) for col in cols} for d in post]
-        return jsonify(posts=result)
-
-api.add_resource(PostListAPI, '/api/users/<int:id>/posts', endpoint = 'posts')
+api.add_resource(UserAPI, '/api/users/<int:id>', endpoint = 'user')
 
 
 class PostAPI(Resource):
     decorators = [auth.login_required]
 
+    def post(self, uid, id = None):
+        user = User.query.get(uid) #get user who will post
+        title = request.json.get('title')
+        body  = request.json.get('body')
+        p = Post(title = request.json.get('title'), body  = request.json.get('body'), author=user) #input title and body of post
+        if p.title is None or p.body is None: #missing arguments
+            return {'message': 'missing arguments' }, 400
+        if not user: #if user does not exist
+            return {'message' : 'user does not exist'}, 404
+        if Post.query.filter_by(title=title).first() is not None:
+            return {'message': 'post already exists' }, 400 #posts already exist
+        db.session.add(p) #add post to db
+        db.session.commit()
+        return { p.author.username : { 'post': p.title, 'body': p.body}}, 201
+
     def get(self, uid, id):
         user = User.query.get(uid) #get user who posted
         post = Post.query.get(id) #get post to be read
+        
         if not user: #if user does not exist
-            return user_notexist()
+            return {'message' : 'user does not exist'}, 404
         if not post:  #if post does not exist
-            return post_notexist()
+            cols = ['id', 'title', 'body', 'user_id']
+            post = Post.query.all() #get all posts of user
+            result = [{col: getattr(d, col) for col in cols} for d in post]
+            return jsonify(posts=result)
+        
         return {post.author.username : { 'post': post.title, 'body': post.body}}
 
     def put(self, uid, id):
         user = User.query.get(uid) #get user who posted
         post = Post.query.get(id) #get post to be updated
         if not user: #if user does not exist
-            return user_notexist()
+            return {'message' : 'user does not exist'}, 404
         if not post:  #if post does not exist
-            return post_notexist()
+            return {'message': 'post does not exist' }, 404
         if not request.json: #if input is not json
-            return bad_request()
+            return {'message':'bad request'}, 400
         if user.id is not post.author.id: #if user is not the one who posted
-            return not_allowed()
+            return {'message':'not allowed'}, 405
         if 'title' in request.json and type(request.json.get('title')) != unicode: #if entered title is not unicode
-            return bad_request()
+            return {'message':'bad request'}, 400
         if 'body' in request.json and type(request.json.get('body')) is not unicode: #if entered body is not unicode
-            return bad_request()
+            return {'message':'bad request'}, 400
         post.title = request.json.get('title', post.title) #input updated title
         post.body = request.json.get('body', post.body) #input updated body
         db.session.commit() #update in dbs
@@ -212,61 +171,47 @@ class PostAPI(Resource):
         user = User.query.get(uid) #get user who posted
         post = Post.query.get(id) #get post to be deleted
         if not user: #if user does not exist
-            return user_notexist()
+            return {'message' : 'user does not exist'}, 404
         if not post:  #if post does not exist
-            return post_notexist()
+            return {'message': 'post does not exist' }, 404
         if user.id is not post.author.id: #if user is not the one who posted
-            return not_allowed()
+            return {'message':'not allowed'}, 405
         db.session.delete(post) #delete post in db
         db.session.commit()
         return { 'post': post.title, 'result': 'post deleted' }, 200
 
 api.add_resource(PostAPI, '/api/users/<int:uid>/posts/<int:id>', endpoint='post')
 
-class CommentListAPI(Resource):
+class CommentAPI(Resource):
     decorators = [auth.login_required]
 
-    def post(self, uid, id):
+    def post(self, uid, pid, id = None):
         user = User.query.get(uid) #get user who will comment
-        post = Post.query.get(id) #get post to be commented
+        post = Post.query.get(pid) #get post to be commented
         c = Comment(body  = request.json.get('body'), status=post, author=user) #input comment
         if c.body is None: #missing arguments
-            return missing_arg()
+            return {'message': 'missing arguments' }, 400
         if not user: #if user does not exist
-            return user_notexist()
+            return {'message' : 'user does not exist'}, 404
         if not post:  #if post does not exist
-            return post_notexist()
+            return {'message': 'post does not exist' }, 404
         db.session.add(c) #add comment to db
         db.session.commit()
         return { post.author.username : { post.title : { 'body': post.body, 'commented by': c.author.username, 'comment': c.body}}}, 201
-
-    def get(self, uid, id):
-        user = User.query.get(uid) #get user who commented
-        post = Post.query.get(id) #get post commented
-        if not post: #if user or post does not exist
-            return post_notexist()
-        if not user:
-            return not_exist()
-        cols = ['id', 'body', 'user_id', 'post_id']
-        comment = Comment.query.filter_by(post_id=post.id) #get all comments of post
-        result = [{col: getattr(d, col) for col in cols} for d in comment]
-        return jsonify(comments=result)
-
-api.add_resource(CommentListAPI, '/api/users/<int:uid>/posts/<int:id>/comments', endpoint = 'comments')
-
-class CommentAPI(Resource):
-    decorators = [auth.login_required]
 
     def get(self, uid, pid, id):
         user = User.query.get(uid) #get user who commented
         post = Post.query.get(pid) #get post commented
         comment = Comment.query.get(id) #get comment to be read
         if not user: #if user does not exist
-            return user_notexist()
+            return {'message': 'user does not exist' }, 404
         if not post:  #if post does not exist
-            return post_notexist()
+            return {'message': 'post does not exist' }, 404
         if not comment: #if comment does not exist
-            return comment_notexist()
+            cols = ['id', 'body', 'user_id', 'post_id']
+            comment = Comment.query.filter_by(post_id=post.id) #get all comments of post
+            result = [{col: getattr(d, col) for col in cols} for d in comment]
+            return jsonify(comments=result)
         return { post.author.username : { post.title : { 'body': post.body, 'commented by': comment.author.username, 'comment': comment.body}}}
 
     def put(self, uid, pid, id):
@@ -276,17 +221,17 @@ class CommentAPI(Resource):
         if not comment: #if comment does not exist
             return comment_notexist()
         if not user: #if user does not exist
-            return user_notexist()
+            return {'message': 'user does not exist' }, 404
         if not post:
-            return post_notexist()
+            return {'message': 'post does not exist' }, 404
         if not request.json: #if input is not json
-            return bad_request()
+            return {'message':'bad request'}, 400
         if user.id is not comment.author.id: #if user is not the one who commented
-            return not_allowed()
+            return {'message':'not allowed'}, 405
         if post.id is not comment.status.id: #if comment is not in the post or in different post
-            return bad_request()
+            return {'message':'bad request'}, 400
         if 'body' in request.json and type(request.json.get('body')) is not unicode: #if entered comment is not unicode
-            return bad_request()
+            return {'message':'bad request'}, 400
         comment.body = request.json.get('body', comment.body) #input updated comment
         db.session.commit() #update comment in db
         return { post.author.username : { post.title : { 'body': post.body, 'commented by': comment.author.username, 'comment': comment.body }}}
@@ -295,6 +240,14 @@ class CommentAPI(Resource):
         user = User.query.get(uid) #get user who commented
         post = Post.query.get(pid) #get post commented
         comment = Comment.query.get(id) #get comment to be deleted
+        if not user: #if user does not exist
+            return {'message': 'user does not exist' }, 404
+        if not post:
+            return {'message': 'post does not exist' }, 404
+        if not comment: #if comment does not exist
+            return {'message': 'comment does not exist' }, 404
+        if post.id is not comment.status.id: #if comment is not in the post or in different post
+            return {'message':'bad request'}, 400
         db.session.delete(comment) #delete comment in db
         db.session.commit()
         return {'comment': comment.id, 'result': 'comment deleted' }
