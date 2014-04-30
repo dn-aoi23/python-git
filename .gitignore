@@ -1,3 +1,4 @@
 flask
+eve
 *.pyc
 db.sqlite
